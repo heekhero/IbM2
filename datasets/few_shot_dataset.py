@@ -1,17 +1,11 @@
 from torch.utils.data import Dataset
-from PIL import Image
 from torchvision import transforms
-from tqdm import tqdm
-import numpy as np
 import os
-import random
 
 from PIL import Image
-from collections import OrderedDict
 from datasets.aux_dataset import FolderDataset
-from config import DATA_PATH, PATH, SPLIT_PATH, HOST_NAME
+from config import SPLIT_PATH
 
-from collections import defaultdict
 from torchvision.transforms.functional import InterpolationMode
 
 train_preprocess = transforms.Compose([
@@ -29,27 +23,20 @@ test_preprocess = transforms.Compose([
 ])
 
 class FewShotMetaSet:
-    def __init__(self, setname, shot):
-
-        if 'ubuntu' in HOST_NAME:
-            prefix = 'root'
-        else:
-            prefix = 'opt'
+    def __init__(self, data_path, setname, shot):
 
         if setname == 'Imagenet':
-            data_dir = '/{}/Dataset/ImageNet'.format(prefix)
             test_map = 'val'
         elif setname == 'CUB':
-            data_dir = '/mnt/data3/fumh/datasets/CUB'
             test_map = 'test'
         else:
             raise NotImplementedError
 
-        self.test = FolderDataset(root=os.path.join(data_dir, test_map), transform=test_preprocess)
+        self.test = FolderDataset(root=os.path.join(data_path, test_map), transform=test_preprocess)
         self.cls2idx = self.test.class_to_idx
 
-        self.trains = [FewShotSet(data_path=os.path.join(data_dir, 'train'), split='{}/{}/{}shot/{}.txt'.format(SPLIT_PATH, setname, shot, i), cls2idx=self.cls2idx, transform=train_preprocess) for i in range(3)]
-        self.trains_plain = [FewShotSet(data_path=os.path.join(data_dir, 'train'), split='{}/{}/{}shot/{}.txt'.format(SPLIT_PATH, setname, shot, i), cls2idx=self.cls2idx, transform=test_preprocess) for i in range(3)]
+        self.trains = [FewShotSet(data_path=os.path.join(data_path, 'train'), split='{}/{}/{}shot/{}.txt'.format(SPLIT_PATH, setname, shot, i), cls2idx=self.cls2idx, transform=train_preprocess) for i in range(3)]
+        self.trains_plain = [FewShotSet(data_path=os.path.join(data_path, 'train'), split='{}/{}/{}shot/{}.txt'.format(SPLIT_PATH, setname, shot, i), cls2idx=self.cls2idx, transform=test_preprocess) for i in range(3)]
 
 
 class FewShotSet(Dataset):
@@ -58,6 +45,8 @@ class FewShotSet(Dataset):
         self.split = split
         self.cls2idx = cls2idx
         self.transform = transform
+
+        print('using {}'.format(transform))
 
         self.parse()
 

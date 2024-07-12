@@ -1,47 +1,25 @@
 import argparse
 import os
-import pickle
 import random
 
 import numpy as np
 import torch.backends.cudnn
 import torch.optim
 import torch.utils.data
-import torch.nn.functional as F
-import copy
-import time
-import torch.nn as nn
-import math
 
-from tqdm import tqdm
-from collections import defaultdict, OrderedDict
-from config import PATH, DATA3_ROOT_PATH
-from model.classifier import get_classifier
+from config import PATH
 from datasets.aux_dataset import FeatureDataset
-from utils import accuracy, AvgMetric, write, setup_for_distributed, LabelSmoothingCrossEntropy
+from model.classifier import get_classifier
+from utils import accuracy, AvgMetric, write, LabelSmoothingCrossEntropy
 
-# os.environ['CUDA_VISIBLE_DEVICES'] = '0'
-# os.environ['OMP_NUM_THREADS'] = '1'
 torch.backends.cudnn.benchmark = True
 
 def train_loop(args, classifier, train_loader, lr, epsilon, M, epochs, test_loader=None, flag='training'):
     write('Starting {} from epsilon={:.4f} with M={}'.format(flag, epsilon, M), args.log_file)
-    if args.opt == 'adam':
-        write('Using torch.optim.Adam(classifier.parameters(), lr=lr * args.batch_size_per_gpu / 256.) as optimizer', args.log_file)
-        optimizer = torch.optim.Adam(classifier.parameters(), lr=lr * args.batch_size_per_gpu_train / 256.)
-    else:
-        raise NotImplementedError
 
+    optimizer = torch.optim.Adam(classifier.parameters(), lr=lr * args.batch_size_per_gpu / 256.)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, epochs, eta_min=0)
-
-    if args.criterion == 'smooth':
-        write('Using Label Smooth Cross Entropy', args.log_file)
-        criterion = LabelSmoothingCrossEntropy()
-    elif args.criterion == 'ce':
-        write('Using CE Loss', args.log_file)
-        criterion = nn.CrossEntropyLoss()
-    else:
-        raise NotImplementedError
+    criterion = LabelSmoothingCrossEntropy()
 
     for ep in range(1, epochs+1):
         classifier.train()
@@ -95,24 +73,18 @@ def train_loop(args, classifier, train_loader, lr, epsilon, M, epochs, test_load
 def main():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--pt', default=1, type=int)
-    parser.add_argument('--arch', default='deit_small_p16', choices=['deit_small_p16', 'deit_large_p7', 'deit_base_p4', 'deit_small_p8', 'resnet50'])
-    parser.add_argument('--pretrain_method', default='MoCov3', choices=['DINO', 'MSN', 'MoCov3', 'iBOT', 'SimCLR', 'BYOL', 'SwAV'])
-    parser.add_argument('--round', default=0.95, type=float)
+    parser.add_argument('--arch', default='deit_small_p16', choices=['deit_small_p16', 'deit_large_p7', 'deit_base_p4', 'resnet50'])
+    parser.add_argument('--pretrain_method', default='DINO', choices=['DINO', 'MSN', 'MoCov3', 'SimCLR', 'BYOL'])
+    parser.add_argument('--round', default=0.9, type=float)
 
-    parser.add_argument('--opt', default='adam')
     parser.add_argument('--M', default=200, type=int)
-    parser.add_argument('--fc', default='normlinear', choices=['linear', 'normlinear', 'cosine'])
-    parser.add_argument('--criterion', default='smooth', choices=['ce', 'smooth'])
-    parser.add_argument('--pre_epochs', default=60, type=int)
+    parser.add_argument('--pre_epochs', default=100, type=int)
     parser.add_argument('--cycle_epochs', default=20, type=int)
-    parser.add_argument('--final_epochs', default=60, type=int)
+    parser.add_argument('--final_epochs', default=100, type=int)
     parser.add_argument('--search_lr', default=1.0, type=float)
-    parser.add_argument('--train_lr', default=0.5, type=float)
-    parser.add_argument('--scale_factor', default=10.0, type=float)
+    parser.add_argument('--train_lr', default=0.05, type=float)
     parser.add_argument('--right', default=10.0, type=float)
-    parser.add_argument('--batch_size_per_gpu_search', default=256, type=int)
-    parser.add_argument('--batch_size_per_gpu_train', default=256, type=int)
+    parser.add_argument('--batch_size_per_gpu', default=256, type=int)
     parser.add_argument('--batch_size_test_per_gpu', default=256, type=int)
     parser.add_argument('--num_workers_per_gpu', default=0, type=int)
     parser.add_argument('--seed', default=0, type=int)
@@ -124,7 +96,7 @@ def main():
     np.random.seed(args.seed)
     random.seed(args.seed)
 
-    args.dataset = 'Imagenet_{}pt'.format(args.pt)
+    args.dataset = 'Imagenet_1pt'
     args.num_classes = 1000
 
     if 'deit_small' in args.arch:
@@ -139,7 +111,7 @@ def main():
         raise NotImplementedError
 
     exp_dir = os.path.join(PATH, 'checkpoint', args.pretrain_method, args.dataset, args.arch)
-    exp_dir_ft = os.path.join(exp_dir, 'BSearch_recycle_adaptive_th_decouple_search_continue_channel_wise_new_no_cyan', 'pre_norm_True_opt_{}_search_lr_{}_search_bs_{}_train_bs_{}_fc_{}_tao_{}_cri_{}_rd_{}_right_{}_M_{}_Pre_{}_C_{}_F_{}_seed_{}'.format(args.opt, args.search_lr, args.batch_size_per_gpu_search, args.batch_size_per_gpu_train, args.fc, args.scale_factor, args.criterion, args.round, args.right, args.M, args.pre_epochs, args.cycle_epochs, args.final_epochs, args.seed), '{}pt'.format(args.pt))
+    exp_dir_ft = os.path.join(exp_dir, 'IbM2', 'search_lr_{}_bs_{}_rd_{}_right_{}_M_{}_Pre_{}_C_{}_F_{}_seed_{}'.format(args.search_lr, args.batch_size_per_gpu, args.round, args.right, args.M, args.pre_epochs, args.cycle_epochs, args.final_epochs, args.seed), '1pt')
 
     args.exp_dir_ft = exp_dir_ft
     args.exp_dir_ftt = os.path.join(exp_dir_ft, 'naive_bsearch')
@@ -153,7 +125,7 @@ def main():
 
     write(vars(args), args.log_file)
 
-    args.test_path = os.path.join(DATA3_ROOT_PATH, 'checkpoint', args.pretrain_method, args.dataset, args.arch, 'features', 'test_normalized_no_cyan.pth')
+    args.test_path = os.path.join(PATH, 'checkpoint', args.pretrain_method, args.dataset, args.arch, 'features', 'test.pth')
     test_set = FeatureDataset(args.test_path)
     write('the number of samples in test set is {}'.format(len(test_set)), args.log_file)
 
@@ -170,7 +142,7 @@ def main():
 
     write('\n\n', args.log_file)
 
-    args.train_path = os.path.join(DATA3_ROOT_PATH, 'checkpoint', args.pretrain_method, args.dataset, args.arch, 'features', 'train_{}pt_normalized_no_cyan.pth'.format(args.pt))
+    args.train_path = os.path.join(PATH, 'checkpoint', args.pretrain_method, args.dataset, args.arch, 'features', 'train_1pt.pth')
     train_set = FeatureDataset(args.train_path)
     write('the number of samples in train set is {}'.format(len(train_set)), args.log_file)
 
@@ -181,16 +153,16 @@ def main():
     #####################################
 
     write('Std in train(plain) set is {}'.format(args.train_std), args.log_file)
-    train_loader = torch.utils.data.DataLoader(train_set, shuffle=True, batch_size=args.batch_size_per_gpu_train, num_workers=args.num_workers_per_gpu, pin_memory=True)
+    train_loader = torch.utils.data.DataLoader(train_set, shuffle=True, batch_size=args.batch_size_per_gpu, num_workers=args.num_workers_per_gpu, pin_memory=True)
 
 
     write('**********   Final Results   **********', args.log_file)
 
 
-    naive_classifier = get_classifier(args, parallel=False)
+    naive_classifier = get_classifier(args)
     naive_acc = train_loop(args, naive_classifier, train_loader, lr=train_lr, epsilon=0.0, M=1, epochs=args.final_epochs, test_loader=test_loader, flag='post training on naive')
 
-    bsearch_classifier = get_classifier(args, parallel=False)
+    bsearch_classifier = get_classifier(args)
     bsearch_acc = train_loop(args, bsearch_classifier, train_loader, lr=train_lr, epsilon=epsilon, M=args.M, epochs=args.final_epochs, test_loader=test_loader, flag='post training on bsearch')
 
     write('***Final Epsilon    {:.4f}    ***'.format(epsilon), args.log_file)

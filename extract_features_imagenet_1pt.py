@@ -1,48 +1,35 @@
 import argparse
-import copy
-import os
 import pickle
 
-import numpy as np
-import torch.nn as nn
 import torch.backends.cudnn
 import torch.optim
 import torch.utils.data
-from tqdm import tqdm
 
-from collections import defaultdict
-from model.msn_deit import deit_small, deit_large_p7, deit_base_p4
+from config import PATH, IMAGENET_1PT_PATH
+from datasets.metaset import MetaSet
 from model.dino_vision_transformer import vit_small
 from model.mocov3_vits import vit_small as mocov3_vit_small
-from model.iBOT_vision_transformer import vit_small as iBOT_vit_small
+from model.msn_deit import deit_small, deit_large_p7, deit_base_p4
 from model.resnet import resnet50
-from config import PATH
-from datasets.metaset import MetaSet
 from utils import *
 
-from config import DATA3_ROOT_PATH
-# os.environ['CUDA_VISIBLE_DEVICES'] = '0'
-# os.environ['OMP_NUM_THREADS'] = '1'
 torch.backends.cudnn.benchmark = True
-
 
 def main():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--pt', default=1, type=int)
-
     parser.add_argument('--save_test', default=True, action='store_true')
-    parser.add_argument('--arch', default='deit_small_p16', choices=['deit_small_p16', 'deit_large_p7', 'deit_base_p4', 'deit_small_p8', 'resnet50'])
-    parser.add_argument('--batch_size', default=256, type=int)
-    parser.add_argument('--pretrain_method', default='MoCov3', choices=['DINO', 'MSN', 'MoCov3', 'iBOT', 'SimCLR', 'BYOL', 'SwAV'])
+    parser.add_argument('--arch', default='deit_small_p16', choices=['deit_small_p16', 'deit_large_p7', 'deit_base_p4', 'resnet50'])
+    parser.add_argument('--batch_size', default=16, type=int)
+    parser.add_argument('--pretrain_method', default='MoCov3', choices=['DINO', 'MSN', 'MoCov3', 'SimCLR', 'BYOL'])
     parser.add_argument('--num_workers', default=4, type=int)
 
     parser.add_argument('--checkpoint', default='checkpoint')
 
     args = parser.parse_args()
 
-    args.dataset = 'Imagenet_{}pt'.format(args.pt)
-    args.exp_dir = os.path.join(DATA3_ROOT_PATH, args.checkpoint, args.pretrain_method, args.dataset, args.arch, 'features')
+    args.dataset = 'Imagenet_1pt'
+    args.exp_dir = os.path.join(PATH, args.checkpoint, args.pretrain_method, args.dataset, args.arch, 'features')
 
     if args.pretrain_method == 'MSN':
         if args.arch == 'deit_small_p16':
@@ -56,18 +43,11 @@ def main():
     elif args.pretrain_method == 'DINO':
         if args.arch == 'deit_small_p16':
             args.load_path = 'checkpoint/DINO/dino_deitsmall16_pretrain.pth'
-        elif args.arch == 'deit_small_p8':
-            args.load_path = 'checkpoint/DINO/dino_deitsmall8_pretrain.pth'
         else:
             raise NotImplementedError
     elif args.pretrain_method == 'MoCov3':
         if args.arch == 'deit_small_p16':
             args.load_path = 'checkpoint/MoCov3/vit-s-300ep.pth.tar'
-        else:
-            raise NotImplementedError
-    elif args.pretrain_method == 'iBOT':
-        if args.arch == 'deit_small_p16':
-            args.load_path = 'checkpoint/iBOT/checkpoint_teacher_deit_small_p16.pth'
         else:
             raise NotImplementedError
     elif args.pretrain_method == 'SimCLR':
@@ -80,21 +60,16 @@ def main():
             args.load_path = 'checkpoint/BYOL/byol_resnet50_8xb32-accum16-coslr-300e_in1k_20220225-a0daa54a.pth'
         else:
             raise NotImplementedError
-    elif args.pretrain_method == 'SwAV':
-        if args.arch == 'resnet50':
-            args.load_path = 'checkpoint/SwAV/swav_800ep_pretrain.pth.tar'
-        else:
-            raise NotImplementedError
     else:
         raise NotImplementedError
 
-    args.load_path = os.path.join(DATA3_ROOT_PATH, args.load_path)
+    args.load_path = os.path.join(PATH, args.load_path)
     print(args)
 
     if not os.path.exists(args.exp_dir):
         os.makedirs(args.exp_dir)
 
-    mset = MetaSet(args.dataset)
+    mset = MetaSet(data_path=IMAGENET_1PT_PATH)
 
     if args.pretrain_method == 'MSN':
         if args.arch == 'deit_small_p16':
@@ -189,7 +164,7 @@ def main():
         shuffle=False,
         pin_memory=True,
         num_workers=args.num_workers)
-    save_path_all = os.path.join(args.exp_dir, 'train_{}pt_normalized_no_cyan.pth'.format(args.pt))
+    save_path_all = os.path.join(args.exp_dir, 'train_1pt.pth')
 
     feature_list = []
     target_list = []
@@ -223,7 +198,7 @@ def main():
             shuffle=False,
             pin_memory=True,
             num_workers=args.num_workers)
-        save_path_test = os.path.join(args.exp_dir, 'test_normalized_no_cyan.pth')
+        save_path_test = os.path.join(args.exp_dir, 'test.pth')
 
         feature_list = []
         target_list = []
