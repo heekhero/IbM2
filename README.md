@@ -1,6 +1,6 @@
 # IbM2
 
-This repo is the official implementation of our CVPR2024 paper "Instance-based Max-margin for Practical Few-shot Recognition" ([arXiv](https://arxiv.org/abs/2305.17368)). 
+This repo is the official implementation of our CVPR2024 paper "Instance-based Max-margin for Practical Few-shot Recognition" [[arXiv](https://arxiv.org/abs/2305.17368)][[paper](https://openaccess.thecvf.com/content/CVPR2024/papers/Fu_Instance-based_Max-margin_for_Practical_Few-shot_Recognition_CVPR_2024_paper.pdf)][[appendix](https://openaccess.thecvf.com/content/CVPR2024/supplemental/Fu_Instance-based_Max-margin_for_CVPR_2024_supplemental.pdf)][[poster](https://www.lamda.nju.edu.cn/fumh/files/IbM2/IbM2-poster.pdf)][[video](https://www.lamda.nju.edu.cn/fumh/files/IbM2/IbM2-video.mp4)]. 
 
 <h3>TL;DR</h3>
 
